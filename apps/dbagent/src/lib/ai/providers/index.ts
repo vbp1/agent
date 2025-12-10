@@ -4,7 +4,7 @@ export * from './ollama';
 export * from './types';
 
 import { env } from '~/lib/env/server';
-import { getBuiltinProviderRegistry } from './builtin';
+import { getBuiltinProviderRegistry, getBuiltinProviderRegistryAsync, requiresDynamicModelFetching } from './builtin';
 import { createLiteLLMProviderRegistry } from './litellm';
 import { createOllamaProviderRegistry } from './ollama';
 import { Model, ModelWithFallback, ProviderRegistry } from './types';
@@ -31,7 +31,13 @@ function buildProviderRegistry() {
   } else {
     // Only add builtin registry if at least one builtin provider is configured
     // This allows the app to start with only Ollama (no API keys required)
-    registries.push(() => Promise.resolve(getBuiltinProviderRegistry()));
+    // Use async version when OPENAI_BASE_URL is set (dynamic model fetching from OpenAI-compatible endpoints)
+    if (requiresDynamicModelFetching()) {
+      requiresUpdates = true;
+      registries.push(async () => await getBuiltinProviderRegistryAsync());
+    } else {
+      registries.push(() => Promise.resolve(getBuiltinProviderRegistry()));
+    }
   }
 
   // Add optional registries.
@@ -51,12 +57,16 @@ function buildProviderRegistry() {
   const hasLiteLLM = env.LITELLM_BASE_URL && env.LITELLM_API_KEY;
   const hasOllama = !!env.OLLAMA_HOST;
   const hasBuiltinKeys =
-    env.OPENAI_API_KEY || env.ANTHROPIC_API_KEY || env.DEEPSEEK_API_KEY || env.GOOGLE_GENERATIVE_AI_API_KEY;
+    env.OPENAI_API_KEY ||
+    env.OPENAI_BASE_URL ||
+    env.ANTHROPIC_API_KEY ||
+    env.DEEPSEEK_API_KEY ||
+    env.GOOGLE_GENERATIVE_AI_API_KEY;
 
   if (!hasLiteLLM && !hasOllama && !hasBuiltinKeys) {
     throw new Error(
       'No LLM providers configured. Set at least one of: ' +
-        'OPENAI_API_KEY, ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, ' +
+        'OPENAI_API_KEY, OPENAI_BASE_URL, ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, ' +
         'OLLAMA_HOST, or LITELLM_BASE_URL + LITELLM_API_KEY'
     );
   }
