@@ -26,9 +26,3 @@ tsconfig.tsbuildinfo
 .eval-run-id
 
 dist
-
-todos/
-
-CLAUDE.md
-
-**/.env.production
