@@ -330,12 +330,20 @@ export async function getBuiltinProviderRegistryAsync(): Promise<ProviderRegistr
   return await buildBuiltinProviderRegistryAsync();
 }
 
-export function hasBuiltinProviders(): boolean {
+/**
+ * Check if any builtin provider API keys are configured.
+ * This is a lightweight check that doesn't initialize the registry.
+ */
+export function hasBuiltinApiKeys(): boolean {
   return !!(
     env.OPENAI_API_KEY ||
     env.OPENAI_BASE_URL ||
-    env.DEEPSEEK_API_KEY ||
     env.ANTHROPIC_API_KEY ||
+    env.DEEPSEEK_API_KEY ||
     env.GOOGLE_GENERATIVE_AI_API_KEY
   );
+}
+
+export function hasBuiltinProviders(): boolean {
+  return getBuiltinProviderRegistry() !== null;
 }

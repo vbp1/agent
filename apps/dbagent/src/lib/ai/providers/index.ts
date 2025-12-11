@@ -3,8 +3,15 @@ export * from './litellm';
 export * from './ollama';
 export * from './types';
 
+import { DBAccess } from '~/lib/db/db';
+import { getDefaultModel, getDisabledModelIds } from '~/lib/db/model-settings';
 import { env } from '~/lib/env/server';
-import { getBuiltinProviderRegistry, getBuiltinProviderRegistryAsync, requiresDynamicModelFetching } from './builtin';
+import {
+  getBuiltinProviderRegistry,
+  getBuiltinProviderRegistryAsync,
+  hasBuiltinApiKeys,
+  requiresDynamicModelFetching
+} from './builtin';
 import { createLiteLLMProviderRegistry } from './litellm';
 import { createOllamaProviderRegistry } from './ollama';
 import { Model, ModelWithFallback, ProviderRegistry } from './types';
@@ -54,16 +61,10 @@ function buildProviderRegistry() {
 
   // Check if we have any potential providers configured
   // Note: builtin registry may return null if no API keys are set, but that's OK if Ollama is configured
-  const hasLiteLLM = env.LITELLM_BASE_URL && env.LITELLM_API_KEY;
+  const hasLiteLLM = !!(env.LITELLM_BASE_URL && env.LITELLM_API_KEY);
   const hasOllama = !!env.OLLAMA_HOST;
-  const hasBuiltinKeys =
-    env.OPENAI_API_KEY ||
-    env.OPENAI_BASE_URL ||
-    env.ANTHROPIC_API_KEY ||
-    env.DEEPSEEK_API_KEY ||
-    env.GOOGLE_GENERATIVE_AI_API_KEY;
 
-  if (!hasLiteLLM && !hasOllama && !hasBuiltinKeys) {
+  if (!hasLiteLLM && !hasOllama && !hasBuiltinApiKeys()) {
     throw new Error(
       'No LLM providers configured. Set at least one of: ' +
         'OPENAI_API_KEY, OPENAI_BASE_URL, ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, ' +
@@ -108,4 +109,33 @@ export async function getLanguageModel(modelId: string): Promise<Model> {
 export async function getLanguageModelWithFallback(modelId: string): Promise<ModelWithFallback> {
   const registry = await getProviderRegistry();
   return registry.languageModel(modelId, true);
+}
+
+export async function listLanguageModelsForProject(dbAccess: DBAccess, projectId: string): Promise<Model[]> {
+  const allModels = await listLanguageModels();
+  const disabledModelIds = await getDisabledModelIds(dbAccess, projectId);
+
+  // If no settings exist, return all models (backwards compatibility)
+  if (disabledModelIds.length === 0) {
+    return allModels;
+  }
+
+  return allModels.filter((model) => !disabledModelIds.includes(model.info().id));
+}
+
+export async function getDefaultLanguageModelForProject(dbAccess: DBAccess, projectId: string): Promise<Model | null> {
+  const defaultSetting = await getDefaultModel(dbAccess, projectId);
+  if (defaultSetting) {
+    try {
+      return await getLanguageModel(defaultSetting.modelId);
+    } catch {
+      // Model might have been removed, fall through to global default
+    }
+  }
+  // Fallback to global default
+  try {
+    return await getDefaultLanguageModel();
+  } catch {
+    return null;
+  }
 }
