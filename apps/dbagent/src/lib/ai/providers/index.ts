@@ -124,18 +124,22 @@ export async function listLanguageModelsForProject(dbAccess: DBAccess, projectId
 }
 
 export async function getDefaultLanguageModelForProject(dbAccess: DBAccess, projectId: string): Promise<Model | null> {
+  // 1. Try to get explicitly set default model for the project (must be enabled)
   const defaultSetting = await getDefaultModel(dbAccess, projectId);
   if (defaultSetting) {
     try {
       return await getLanguageModel(defaultSetting.modelId);
     } catch {
-      // Model might have been removed, fall through to global default
+      // Model might have been removed, fall through to next fallback
     }
   }
-  // Fallback to global default
-  try {
-    return await getDefaultLanguageModel();
-  } catch {
-    return null;
+
+  // 2. Get list of enabled models for this project and return the first one
+  const enabledModels = await listLanguageModelsForProject(dbAccess, projectId);
+  if (enabledModels.length > 0) {
+    return enabledModels[0]!;
   }
+
+  // 3. No enabled models for this project
+  return null;
 }

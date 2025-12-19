@@ -29,7 +29,9 @@ export async function getDefaultModel(dbAccess: DBAccess, projectId: string): Pr
     const result = await db
       .select()
       .from(modelSettings)
-      .where(and(eq(modelSettings.projectId, projectId), eq(modelSettings.isDefault, true)));
+      .where(
+        and(eq(modelSettings.projectId, projectId), eq(modelSettings.isDefault, true), eq(modelSettings.enabled, true))
+      );
     return result[0] ?? null;
   });
 }
