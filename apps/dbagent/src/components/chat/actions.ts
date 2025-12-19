@@ -10,7 +10,7 @@ import {
   Model
 } from '~/lib/ai/providers';
 import { getUserSessionDBAccess } from '~/lib/db/db';
-import { getEnabledModelsFromDB } from '~/lib/db/model-settings';
+import { getEnabledModelsFromDB, syncModelsToDB } from '~/lib/db/model-settings';
 
 export async function actionGetLanguageModels() {
   const models = await listLanguageModels();
@@ -37,8 +37,8 @@ export async function actionGetLanguageModelsForProject(projectId: string) {
 
 /**
  * Hybrid approach for model selector:
- * - If DB has enabled models, return them (fast, no /v1/models call)
- * - If DB is empty (first run), fall back to provider registry
+ * - If DB has enabled models with names, return them (fast, no /v1/models call)
+ * - If DB is empty or missing names, fall back to provider registry and update DB
  */
 export async function actionGetLanguageModelsForProjectHybrid(projectId: string) {
   const dbAccess = await getUserSessionDBAccess();
@@ -47,11 +47,11 @@ export async function actionGetLanguageModelsForProjectHybrid(projectId: string)
   const dbModels = await getEnabledModelsFromDB(dbAccess, projectId);
 
   if (dbModels !== null) {
-    // Models found in DB, return them directly (already sorted)
+    // Models found in DB with names, return them directly (already sorted)
     return dbModels;
   }
 
-  // No models in DB (first run), fall back to provider registry
+  // No models in DB or missing names, fall back to provider registry
   const models = await listLanguageModelsForProject(dbAccess, projectId);
   const defaultModelId = await getDefaultModelIdForProject(dbAccess, projectId);
 
@@ -68,6 +68,13 @@ export async function actionGetLanguageModelsForProjectHybrid(projectId: string)
     if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1;
     return a.name.localeCompare(b.name);
   });
+
+  // Sync all models to DB for future calls (fire and forget)
+  void syncModelsToDB(
+    dbAccess,
+    projectId,
+    modelsWithInfo.map((m) => ({ id: m.id, name: m.name }))
+  );
 
   return modelsWithInfo;
 }

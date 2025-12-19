@@ -6,6 +6,7 @@ import {
   getDefaultModel,
   getModelSettings,
   setDefaultModel,
+  syncModelsToDB,
   updateModelEnabled
 } from '~/lib/db/model-settings';
 import { getProjectById } from '~/lib/db/projects';
@@ -87,6 +88,15 @@ export async function GET(request: NextRequest) {
 
     // Get provider errors (e.g., autodiscovery failures)
     const providerErrors = await getProviderErrors();
+
+    // Sync all models to DB (fire and forget)
+    // - Updates names for existing models if missing
+    // - Creates new models with enabled: false
+    void syncModelsToDB(
+      dbAccess,
+      projectId,
+      modelsWithSettings.map((m) => ({ id: m.id, name: m.name }))
+    );
 
     return Response.json({ models: modelsWithSettings, missingModels, providerErrors });
   } catch (error) {

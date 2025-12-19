@@ -68,11 +68,18 @@ export async function getEnabledModelsFromDB(dbAccess: DBAccess, projectId: stri
       return null;
     }
 
+    // If any model is missing a name, return null to force registry fetch
+    // This ensures we show proper model names, not just IDs
+    const hasMissingNames = settings.some((s) => !s.modelName);
+    if (hasMissingNames) {
+      return null;
+    }
+
     // Sort: default first, then alphabetically by name
     return settings
       .map((s) => ({
         id: s.modelId,
-        name: s.modelName ?? s.modelId, // Fallback to modelId if name not saved
+        name: s.modelName!, // Safe because we checked above
         isDefault: s.isDefault
       }))
       .sort((a, b) => {
@@ -198,5 +205,48 @@ export async function deleteModelSetting(dbAccess: DBAccess, projectId: string, 
     await db
       .delete(modelSettings)
       .where(and(eq(modelSettings.projectId, projectId), eq(modelSettings.modelId, modelId)));
+  });
+}
+
+/**
+ * Sync models from registry to DB.
+ * - If model exists in DB: update name if missing
+ * - If model doesn't exist in DB: create with enabled: false
+ */
+export async function syncModelsToDB(
+  dbAccess: DBAccess,
+  projectId: string,
+  models: { id: string; name: string }[]
+): Promise<void> {
+  return dbAccess.query(async ({ db }) => {
+    // Get existing model settings for this project
+    const existingSettings = await db
+      .select({ modelId: modelSettings.modelId, modelName: modelSettings.modelName })
+      .from(modelSettings)
+      .where(eq(modelSettings.projectId, projectId));
+
+    const existingMap = new Map(existingSettings.map((s) => [s.modelId, s.modelName]));
+
+    for (const { id, name } of models) {
+      if (existingMap.has(id)) {
+        // Model exists - update name if missing
+        const existingName = existingMap.get(id);
+        if (!existingName) {
+          await db
+            .update(modelSettings)
+            .set({ modelName: name, updatedAt: new Date() })
+            .where(and(eq(modelSettings.projectId, projectId), eq(modelSettings.modelId, id)));
+        }
+      } else {
+        // Model doesn't exist - create with enabled: false
+        await db.insert(modelSettings).values({
+          projectId,
+          modelId: id,
+          modelName: name,
+          enabled: false,
+          isDefault: false
+        });
+      }
+    }
   });
 }
