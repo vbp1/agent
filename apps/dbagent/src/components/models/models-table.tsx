@@ -13,7 +13,14 @@ import {
   TableHeader,
   TableRow
 } from '@xata.io/components';
-import { AlertTriangleIcon, ChevronLeftIcon, ChevronRightIcon, StarIcon, Trash2Icon } from 'lucide-react';
+import {
+  AlertTriangleIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  RefreshCwIcon,
+  StarIcon,
+  Trash2Icon
+} from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -40,6 +47,7 @@ export function ModelsTable() {
   const [currentPage, setCurrentPage] = useState(1);
   const [updatingModels, setUpdatingModels] = useState<Set<string>>(new Set());
   const [deletingModels, setDeletingModels] = useState<Set<string>>(new Set());
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const loadModels = useCallback(async () => {
     if (!project) return;
@@ -84,7 +92,7 @@ export function ModelsTable() {
       const response = await fetch(`/api/models?projectId=${project}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modelId: model.id, enabled: !model.enabled })
+        body: JSON.stringify({ modelId: model.id, modelName: model.name, enabled: !model.enabled })
       });
 
       if (!response.ok) {
@@ -127,7 +135,7 @@ export function ModelsTable() {
       const response = await fetch(`/api/models?projectId=${project}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modelId: model.id, isDefault: true })
+        body: JSON.stringify({ modelId: model.id, modelName: model.name, isDefault: true })
       });
 
       if (!response.ok) {
@@ -180,6 +188,20 @@ export function ModelsTable() {
     }
   };
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      // Reset the provider registry cache
+      await fetch('/api/models?action=refresh', { method: 'POST' });
+      // Reload models with fresh data
+      await loadModels();
+    } catch (error) {
+      console.error('Error refreshing models:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const SkeletonRow = () => (
     <TableRow>
       <TableCell>
@@ -203,6 +225,10 @@ export function ModelsTable() {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-2xl font-bold">Models</h1>
+        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isLoading || isRefreshing}>
+          <RefreshCwIcon className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          {isRefreshing ? 'Refreshing...' : 'Refresh'}
+        </Button>
       </div>
 
       <div className="mb-6">

@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getProviderErrors, listLanguageModels } from '~/lib/ai/providers';
+import { getProviderErrors, listLanguageModels, resetProviderRegistryCache } from '~/lib/ai/providers';
 import { getUserSessionDBAccess } from '~/lib/db/db';
 import {
   deleteModelSetting,
@@ -105,7 +105,7 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { modelId, enabled, isDefault } = body;
+    const { modelId, modelName, enabled, isDefault } = body;
 
     if (!modelId) {
       return new Response('modelId is required', { status: 400 });
@@ -121,7 +121,7 @@ export async function PATCH(request: NextRequest) {
 
     // Handle setting default model
     if (isDefault === true) {
-      await setDefaultModel(dbAccess, projectId, modelId);
+      await setDefaultModel(dbAccess, projectId, modelId, modelName);
       return Response.json({ success: true, message: 'Default model updated' });
     }
 
@@ -137,7 +137,7 @@ export async function PATCH(request: NextRequest) {
         }
       }
 
-      await updateModelEnabled(dbAccess, projectId, modelId, enabled);
+      await updateModelEnabled(dbAccess, projectId, modelId, enabled, modelName);
       return Response.json({ success: true, message: 'Model setting updated' });
     }
 
@@ -184,4 +184,22 @@ export async function DELETE(request: NextRequest) {
     console.error('Error deleting model setting:', error);
     return new Response('An error occurred while deleting model setting', { status: 500 });
   }
+}
+
+export async function POST(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const action = searchParams.get('action');
+
+  if (action === 'refresh') {
+    try {
+      // Reset the provider registry cache to force a fresh fetch
+      resetProviderRegistryCache();
+      return Response.json({ success: true, message: 'Model cache refreshed' });
+    } catch (error) {
+      console.error('Error refreshing model cache:', error);
+      return new Response('An error occurred while refreshing model cache', { status: 500 });
+    }
+  }
+
+  return new Response('Unknown action', { status: 400 });
 }
