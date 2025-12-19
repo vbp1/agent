@@ -143,3 +143,13 @@ export async function getDefaultLanguageModelForProject(dbAccess: DBAccess, proj
   // 3. No enabled models for this project
   return null;
 }
+
+/**
+ * Get default model ID for project without triggering provider registry fetch.
+ * Use this when you only need the model ID string (e.g., when creating a new chat).
+ * Falls back to 'chat' alias if no default is set.
+ */
+export async function getDefaultModelIdForProject(dbAccess: DBAccess, projectId: string): Promise<string> {
+  const defaultSetting = await getDefaultModel(dbAccess, projectId);
+  return defaultSetting?.modelId ?? 'chat';
+}

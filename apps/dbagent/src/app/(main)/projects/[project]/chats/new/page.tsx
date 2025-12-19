@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { generateUUID } from '~/components/chat/utils';
-import { getDefaultLanguageModelForProject } from '~/lib/ai/providers';
+import { getDefaultModelIdForProject } from '~/lib/ai/providers';
 import { saveChat } from '~/lib/db/chats';
 import { getUserSessionDBAccess } from '~/lib/db/db';
 import { getScheduleRun } from '~/lib/db/schedule-runs';
@@ -31,8 +31,7 @@ export default async function Page({
   const userId = await requireUserSession();
   const dbAccess = await getUserSessionDBAccess();
   const chatId = generateUUID();
-  const defaultModel = await getDefaultLanguageModelForProject(dbAccess, project);
-  const modelId = defaultModel?.info().id ?? 'chat';
+  const modelId = await getDefaultModelIdForProject(dbAccess, project);
 
   if (scheduleRun) {
     const run = await getScheduleRun(dbAccess, scheduleRun);
