@@ -115,32 +115,6 @@ export function combineRegistries(registries: (ProviderRegistry | null)[]): Prov
   };
 }
 
-export function cached<T>(ttlMs: number, fn: () => Promise<T>): () => Promise<T> {
-  let value: T | null = null;
-  let lastUpdate: number | null = null;
-
-  return async () => {
-    const now = Date.now();
-    if (lastUpdate && now - lastUpdate < ttlMs) {
-      return value!;
-    }
-
-    const result = await fn();
-    value = result;
-    lastUpdate = now;
-    return result;
-  };
-}
-
-export function memoize<T>(fn: () => Promise<T>): () => Promise<T> {
-  let value: T | null = null;
-  return async () => {
-    if (value) return value;
-    value = await fn();
-    return value;
-  };
-}
-
 export type MemoizedWithReset<T> = {
   get: () => Promise<T>;
   reset: () => void;
