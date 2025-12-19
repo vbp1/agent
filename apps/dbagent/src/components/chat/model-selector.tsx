@@ -1,6 +1,6 @@
 'use client';
 
-import { startTransition, useEffect, useState } from 'react';
+import { startTransition, useEffect, useMemo, useState } from 'react';
 
 import {
   Button,
@@ -12,8 +12,9 @@ import {
 } from '@xata.io/components';
 import { CheckCircleIcon, ChevronDownIcon } from 'lucide-react';
 import { useParams } from 'next/navigation';
-import { ProviderModel } from '~/lib/ai/providers/types';
-import { actionGetLanguageModel, actionGetLanguageModels, actionGetLanguageModelsForProject } from './actions';
+import { actionGetLanguageModels, actionGetLanguageModelsForProjectHybrid } from './actions';
+
+type ModelInfo = { id: string; name: string };
 
 interface ModelSelectorProps {
   value: string;
@@ -27,20 +28,32 @@ export function ModelSelector({ value, onValueChange, className, projectId: prop
   const projectId = propProjectId || params.project;
 
   const [open, setOpen] = useState(false);
-  const [models, setModels] = useState<ProviderModel[]>([]);
-  const [selectedChatModel, setSelectedChatModel] = useState<ProviderModel | null>(null);
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [modelsLoaded, setModelsLoaded] = useState(false);
 
+  // Load models lazily when dropdown is opened
+  // Uses hybrid approach: DB first (fast), provider registry as fallback
   useEffect(() => {
-    if (projectId) {
-      void actionGetLanguageModelsForProject(projectId).then(setModels);
-    } else {
-      void actionGetLanguageModels().then(setModels);
+    if (open && !modelsLoaded) {
+      if (projectId) {
+        void actionGetLanguageModelsForProjectHybrid(projectId).then((loadedModels) => {
+          setModels(loadedModels);
+          setModelsLoaded(true);
+        });
+      } else {
+        void actionGetLanguageModels().then((loadedModels) => {
+          setModels(loadedModels);
+          setModelsLoaded(true);
+        });
+      }
     }
-  }, [projectId]);
+  }, [open, projectId, modelsLoaded]);
 
-  useEffect(() => {
-    void actionGetLanguageModel(value).then(setSelectedChatModel);
-  }, [value]);
+  // Find selected model from loaded models list, or use value as display name
+  const selectedModelName = useMemo(() => {
+    const model = models.find((m) => m.id === value);
+    return model?.name ?? value;
+  }, [models, value]);
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -49,7 +62,7 @@ export function ModelSelector({ value, onValueChange, className, projectId: prop
         className={cn('data-[state=open]:bg-accent data-[state=open]:text-accent-foreground w-fit', className)}
       >
         <Button data-testid="model-selector" variant="outline" className="md:h-[34px] md:px-2">
-          {selectedChatModel?.name || 'Select model'}
+          {selectedModelName || 'Select model'}
           <ChevronDownIcon />
         </Button>
       </DropdownMenuTrigger>
@@ -68,7 +81,7 @@ export function ModelSelector({ value, onValueChange, className, projectId: prop
                   onValueChange(id);
                 });
               }}
-              data-active={id === selectedChatModel?.id}
+              data-active={id === value}
               asChild
             >
               <button type="button" className="group/item flex w-full flex-row items-center justify-between gap-4">
