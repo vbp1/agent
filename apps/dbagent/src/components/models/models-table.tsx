@@ -24,12 +24,18 @@ interface ModelWithSettings {
   isDefault: boolean;
 }
 
+interface ProviderError {
+  provider: string;
+  error: string;
+}
+
 const ITEMS_PER_PAGE = 10;
 
 export function ModelsTable() {
   const { project } = useParams<{ project: string }>();
   const [models, setModels] = useState<ModelWithSettings[]>([]);
   const [missingModels, setMissingModels] = useState<ModelWithSettings[]>([]);
+  const [providerErrors, setProviderErrors] = useState<ProviderError[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [updatingModels, setUpdatingModels] = useState<Set<string>>(new Set());
@@ -48,10 +54,12 @@ export function ModelsTable() {
       const data = await response.json();
       setModels(data.models);
       setMissingModels(data.missingModels || []);
+      setProviderErrors(data.providerErrors || []);
     } catch (error) {
       console.error('Error loading models:', error);
       setModels([]);
       setMissingModels([]);
+      setProviderErrors([]);
     } finally {
       setIsLoading(false);
     }
@@ -206,6 +214,25 @@ export function ModelsTable() {
           </AlertDescription>
         </Alert>
       </div>
+
+      {/* Provider Errors Alert */}
+      {!isLoading && providerErrors.length > 0 && (
+        <div className="mb-6">
+          <Alert variant="destructive">
+            <AlertTriangleIcon className="h-4 w-4" />
+            <AlertTitle>Model Discovery Error</AlertTitle>
+            <AlertDescription>
+              <div className="mt-2 space-y-1">
+                {providerErrors.map((err, index) => (
+                  <div key={index}>
+                    <strong>{err.provider}:</strong> {err.error}
+                  </div>
+                ))}
+              </div>
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
 
       <Table>
         <TableHeader>

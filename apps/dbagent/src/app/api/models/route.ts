@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { listLanguageModels } from '~/lib/ai/providers';
+import { getProviderErrors, listLanguageModels } from '~/lib/ai/providers';
 import { getUserSessionDBAccess } from '~/lib/db/db';
 import {
   deleteModelSetting,
@@ -50,6 +50,20 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    // Sort models: default first, then enabled, then alphabetically by name
+    modelsWithSettings.sort((a, b) => {
+      // Default model always first
+      if (a.isDefault !== b.isDefault) {
+        return a.isDefault ? -1 : 1;
+      }
+      // Enabled models before disabled
+      if (a.enabled !== b.enabled) {
+        return a.enabled ? -1 : 1;
+      }
+      // Alphabetical by name
+      return a.name.localeCompare(b.name);
+    });
+
     // Find missing models (settings exist but model is no longer available)
     const missingModels = settings
       .filter((s) => !availableModelIds.has(s.modelId))
@@ -60,7 +74,21 @@ export async function GET(request: NextRequest) {
         isDefault: defaultSetting?.modelId === s.modelId
       }));
 
-    return Response.json({ models: modelsWithSettings, missingModels });
+    // Sort missing models the same way
+    missingModels.sort((a, b) => {
+      if (a.isDefault !== b.isDefault) {
+        return a.isDefault ? -1 : 1;
+      }
+      if (a.enabled !== b.enabled) {
+        return a.enabled ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name);
+    });
+
+    // Get provider errors (e.g., autodiscovery failures)
+    const providerErrors = await getProviderErrors();
+
+    return Response.json({ models: modelsWithSettings, missingModels, providerErrors });
   } catch (error) {
     console.error('Error fetching models:', error);
     return new Response('An error occurred while fetching models', { status: 500 });
