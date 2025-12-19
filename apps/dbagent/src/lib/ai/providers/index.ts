@@ -15,19 +15,13 @@ import {
 import { createLiteLLMProviderRegistry } from './litellm';
 import { createOllamaProviderRegistry } from './ollama';
 import { Model, ModelWithFallback, ProviderError, ProviderRegistry } from './types';
-import { cached, combineRegistries, memoize } from './utils';
+import { combineRegistries, MemoizedWithReset, memoizeWithReset } from './utils';
 
-const CACHE_TTL_MS = 60 * 1000; // 1 minute
-
-function buildProviderRegistry() {
+function buildProviderRegistry(): MemoizedWithReset<ProviderRegistry> {
   const registries: (() => Promise<ProviderRegistry | null>)[] = [];
-
-  // Will be true if we have a provider that requires to fetch updates from a remote source.
-  let requiresUpdates = false;
 
   // Choose base registry: LiteLLM takes precedence, otherwise use builtin providers if available
   if (env.LITELLM_BASE_URL && env.LITELLM_API_KEY) {
-    requiresUpdates = true;
     registries.push(
       async () =>
         await createLiteLLMProviderRegistry({
@@ -40,7 +34,6 @@ function buildProviderRegistry() {
     // This allows the app to start with only Ollama (no API keys required)
     // Use async version when OPENAI_BASE_URL is set (dynamic model fetching from OpenAI-compatible endpoints)
     if (requiresDynamicModelFetching()) {
-      requiresUpdates = true;
       registries.push(async () => await getBuiltinProviderRegistryAsync());
     } else {
       registries.push(() => Promise.resolve(getBuiltinProviderRegistry()));
@@ -49,7 +42,6 @@ function buildProviderRegistry() {
 
   // Add optional registries.
   if (env.OLLAMA_HOST) {
-    requiresUpdates = true;
     registries.push(
       async () =>
         await createOllamaProviderRegistry({
@@ -78,13 +70,22 @@ function buildProviderRegistry() {
     return combineRegistries(buildRegistries);
   };
 
-  return requiresUpdates ? cached(CACHE_TTL_MS, build) : memoize(build);
+  // Use memoizeWithReset for infinite caching with manual refresh capability
+  return memoizeWithReset(build);
 }
 
 const providerRegistry = buildProviderRegistry();
 
 export async function getProviderRegistry(): Promise<ProviderRegistry> {
-  return await providerRegistry();
+  return await providerRegistry.get();
+}
+
+/**
+ * Reset the provider registry cache, forcing a refresh on next access.
+ * Use this when user manually requests to refresh the models list.
+ */
+export function resetProviderRegistryCache(): void {
+  providerRegistry.reset();
 }
 
 export async function listLanguageModels(): Promise<Model[]> {

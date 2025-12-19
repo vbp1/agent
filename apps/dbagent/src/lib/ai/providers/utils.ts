@@ -140,3 +140,22 @@ export function memoize<T>(fn: () => Promise<T>): () => Promise<T> {
     return value;
   };
 }
+
+export type MemoizedWithReset<T> = {
+  get: () => Promise<T>;
+  reset: () => void;
+};
+
+export function memoizeWithReset<T>(fn: () => Promise<T>): MemoizedWithReset<T> {
+  let value: T | null = null;
+  return {
+    get: async () => {
+      if (value) return value;
+      value = await fn();
+      return value;
+    },
+    reset: () => {
+      value = null;
+    }
+  };
+}
