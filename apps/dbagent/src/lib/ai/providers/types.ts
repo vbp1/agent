@@ -1,10 +1,16 @@
 import { ProviderV1 } from '@ai-sdk/provider';
 import { LanguageModel } from 'ai';
 
+export type ProviderError = {
+  provider: string;
+  error: string;
+};
+
 export interface ProviderRegistry {
   listLanguageModels(): Model[];
   defaultLanguageModel(): Model | null;
   languageModel(modelId: string, useFallback?: boolean): ModelWithFallback;
+  getErrors(): ProviderError[];
 }
 
 export interface Model {

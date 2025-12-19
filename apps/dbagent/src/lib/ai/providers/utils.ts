@@ -1,5 +1,5 @@
 import { LanguageModel } from 'ai';
-import { Model, ModelWithFallback, ProviderModel, ProviderRegistry } from './types';
+import { Model, ModelWithFallback, ProviderError, ProviderModel, ProviderRegistry } from './types';
 
 type RegistryFromModelsProps<TModel extends Model> = {
   models: TModel[] | Record<string, TModel>;
@@ -7,6 +7,7 @@ type RegistryFromModelsProps<TModel extends Model> = {
   id?: (model: TModel) => string;
   defaultModel?: TModel | null;
   fallback?: (modelId: string) => TModel | undefined;
+  errors?: ProviderError[];
 };
 
 export function createRegistryFromModels<TModel extends Model>({
@@ -14,7 +15,8 @@ export function createRegistryFromModels<TModel extends Model>({
   id,
   defaultModel,
   fallback,
-  aliases
+  aliases,
+  errors = []
 }: RegistryFromModelsProps<TModel>): ProviderRegistry {
   const index: Record<string, TModel> = Array.isArray(models)
     ? Object.fromEntries(models.map((m: TModel) => [id ? id(m) : m.info().id, m]))
@@ -43,7 +45,8 @@ export function createRegistryFromModels<TModel extends Model>({
         throw new Error(`Model ${modelId} not found and no fallback available`);
       }
       return reportFallbackModel(modelId, fallbackModel);
-    }
+    },
+    getErrors: () => errors
   };
 }
 
@@ -107,7 +110,8 @@ export function combineRegistries(registries: (ProviderRegistry | null)[]): Prov
         }
       }
       throw new Error(`Model ${modelId} not found`);
-    }
+    },
+    getErrors: () => nonNullRegistries.flatMap((registry) => registry.getErrors())
   };
 }
 

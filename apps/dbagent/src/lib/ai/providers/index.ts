@@ -14,7 +14,7 @@ import {
 } from './builtin';
 import { createLiteLLMProviderRegistry } from './litellm';
 import { createOllamaProviderRegistry } from './ollama';
-import { Model, ModelWithFallback, ProviderRegistry } from './types';
+import { Model, ModelWithFallback, ProviderError, ProviderRegistry } from './types';
 import { cached, combineRegistries, memoize } from './utils';
 
 const CACHE_TTL_MS = 60 * 1000; // 1 minute
@@ -90,6 +90,11 @@ export async function getProviderRegistry(): Promise<ProviderRegistry> {
 export async function listLanguageModels(): Promise<Model[]> {
   const registry = await getProviderRegistry();
   return registry.listLanguageModels().filter((model) => !model.info().private);
+}
+
+export async function getProviderErrors(): Promise<ProviderError[]> {
+  const registry = await getProviderRegistry();
+  return registry.getErrors();
 }
 
 export async function getDefaultLanguageModel(): Promise<Model> {

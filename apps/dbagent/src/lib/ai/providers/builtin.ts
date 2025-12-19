@@ -9,6 +9,7 @@ import { createModel, createRegistryFromModels } from './utils';
 
 type BuiltinProvider = Provider & {
   models: BuiltinProviderModel[];
+  error?: string;
 };
 
 type BuiltinProviderModel = ProviderModel & {
@@ -42,11 +43,19 @@ const defaultOpenAIModels: BuiltinProviderModel[] = [
   { id: 'openai:gpt-4o', providerId: 'gpt-4o', name: 'GPT-4o' }
 ];
 
+const FETCH_TIMEOUT_MS = 15000; // 15 seconds
+
+export type FetchModelsResult = {
+  models: BuiltinProviderModel[];
+  error?: string;
+};
+
 /**
  * Fetch models from an OpenAI-compatible API endpoint.
  * Used when OPENAI_BASE_URL is set (e.g., vLLM, LM Studio, text-generation-inference).
+ * Returns models and optional error message for graceful degradation.
  */
-async function fetchOpenAICompatibleModels(baseUrl: string, apiKey?: string): Promise<BuiltinProviderModel[]> {
+async function fetchOpenAICompatibleModels(baseUrl: string, apiKey?: string): Promise<FetchModelsResult> {
   const url = baseUrl.endsWith('/v1') ? `${baseUrl}/models` : `${baseUrl}/v1/models`;
 
   const headers: Record<string, string> = {
@@ -57,24 +66,50 @@ async function fetchOpenAICompatibleModels(baseUrl: string, apiKey?: string): Pr
     headers['Authorization'] = `Bearer ${apiKey}`;
   }
 
-  const response = await fetch(url, { headers });
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch models from ${url}: ${response.status} ${response.statusText}`);
-  }
+    const response = await fetch(url, {
+      headers,
+      signal: controller.signal
+    });
 
-  const data: OpenAIModelsResponse = await response.json();
+    clearTimeout(timeoutId);
 
-  return data.data.map((model) => {
-    // Extract friendly name from model ID (e.g., "meta-llama/Llama-3.1-70B-Instruct" -> "Llama 3.1 70B Instruct")
-    const friendlyName = model.id.split('/').pop()?.replace(/-/g, ' ') || model.id;
+    if (!response.ok) {
+      return {
+        models: [],
+        error: `Failed to fetch models from ${url}: ${response.status} ${response.statusText}`
+      };
+    }
 
+    const data: OpenAIModelsResponse = await response.json();
+
+    const models = data.data.map((model) => {
+      // Extract friendly name from model ID (e.g., "meta-llama/Llama-3.1-70B-Instruct" -> "Llama 3.1 70B Instruct")
+      const friendlyName = model.id.split('/').pop()?.replace(/-/g, ' ') || model.id;
+
+      return {
+        id: `openai:${model.id}`,
+        providerId: model.id,
+        name: friendlyName
+      };
+    });
+
+    return { models };
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return {
+        models: [],
+        error: `Timeout fetching models from ${url} (exceeded ${FETCH_TIMEOUT_MS / 1000}s)`
+      };
+    }
     return {
-      id: `openai:${model.id}`,
-      providerId: model.id,
-      name: friendlyName
+      models: [],
+      error: `Error fetching models from ${url}: ${error instanceof Error ? error.message : 'Unknown error'}`
     };
-  });
+  }
 }
 
 function getBuiltinOpenAIModels(): BuiltinProvider {
@@ -100,6 +135,7 @@ async function getBuiltinOpenAIModelsAsync(): Promise<BuiltinProvider> {
   const hasRealApiKey = env.OPENAI_API_KEY && env.OPENAI_API_KEY !== 'dumb';
 
   let models: BuiltinProviderModel[];
+  let error: string | undefined;
 
   if (hasRealApiKey) {
     // Use hardcoded OpenAI models when real API key is provided
@@ -118,7 +154,9 @@ async function getBuiltinOpenAIModelsAsync(): Promise<BuiltinProvider> {
       ];
     } else {
       // Fetch models dynamically from /v1/models endpoint
-      models = await fetchOpenAICompatibleModels(env.OPENAI_BASE_URL, env.OPENAI_API_KEY);
+      const result = await fetchOpenAICompatibleModels(env.OPENAI_BASE_URL, env.OPENAI_API_KEY);
+      models = result.models;
+      error = result.error;
     }
   } else {
     models = defaultOpenAIModels;
@@ -131,7 +169,8 @@ async function getBuiltinOpenAIModelsAsync(): Promise<BuiltinProvider> {
       kind: getOpenAIClient(),
       fallback: models[0]?.providerId
     },
-    models
+    models,
+    error
   };
 }
 
@@ -230,12 +269,22 @@ function buildBuiltinProviderModels(): Record<string, Model> | null {
   );
 }
 
-async function buildBuiltinProviderModelsAsync(): Promise<Record<string, Model> | null> {
+type BuildModelsResult = {
+  models: Record<string, Model>;
+  errors: { provider: string; error: string }[];
+} | null;
+
+async function buildBuiltinProviderModelsAsync(): Promise<BuildModelsResult> {
   const activeList: BuiltinProvider[] = [];
+  const errors: { provider: string; error: string }[] = [];
 
   // Fetch OpenAI models asynchronously (supports dynamic model discovery for OPENAI_BASE_URL)
   if (env.OPENAI_API_KEY || env.OPENAI_BASE_URL) {
-    activeList.push(await getBuiltinOpenAIModelsAsync());
+    const openaiProvider = await getBuiltinOpenAIModelsAsync();
+    activeList.push(openaiProvider);
+    if (openaiProvider.error) {
+      errors.push({ provider: 'OpenAI', error: openaiProvider.error });
+    }
   }
   if (env.DEEPSEEK_API_KEY) {
     activeList.push(builtinDeepseekModels);
@@ -252,7 +301,7 @@ async function buildBuiltinProviderModelsAsync(): Promise<Record<string, Model> 
     return null;
   }
 
-  return Object.fromEntries(
+  const models = Object.fromEntries(
     activeList.flatMap((p) => {
       const factory = p.info.kind;
       return p.models.map((model: BuiltinProviderModel) => {
@@ -261,9 +310,14 @@ async function buildBuiltinProviderModelsAsync(): Promise<Record<string, Model> 
       });
     })
   );
+
+  return { models, errors };
 }
 
-function buildRegistry(builtinProviderModels: Record<string, Model>): ProviderRegistry {
+function buildRegistry(
+  builtinProviderModels: Record<string, Model>,
+  errors: { provider: string; error: string }[] = []
+): ProviderRegistry {
   // We default to the first OpenAI model if available, otherwise fallback to the first model in the list
   const fallbackModel = Object.values(builtinProviderModels)[0]!;
   const openaiModels = Object.entries(builtinProviderModels).filter(([id]) => id.startsWith('openai:'));
@@ -278,7 +332,8 @@ function buildRegistry(builtinProviderModels: Record<string, Model>): ProviderRe
   return createRegistryFromModels({
     models: builtinProviderModels,
     aliases: builtinModelAliases,
-    defaultModel: defaultLanguageModel
+    defaultModel: defaultLanguageModel,
+    errors
   });
 }
 
@@ -293,13 +348,13 @@ function buildBuiltinProviderRegistry(): ProviderRegistry | null {
 }
 
 async function buildBuiltinProviderRegistryAsync(): Promise<ProviderRegistry | null> {
-  const builtinProviderModels = await buildBuiltinProviderModelsAsync();
+  const result = await buildBuiltinProviderModelsAsync();
 
-  if (!builtinProviderModels) {
+  if (!result) {
     return null;
   }
 
-  return buildRegistry(builtinProviderModels);
+  return buildRegistry(result.models, result.errors);
 }
 
 /**
