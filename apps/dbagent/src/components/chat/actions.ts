@@ -3,6 +3,7 @@
 import {
   getDefaultLanguageModel,
   getDefaultLanguageModelForProject,
+  getDefaultModelIdForProject,
   getLanguageModel,
   listLanguageModels,
   listLanguageModelsForProject,
@@ -18,7 +19,19 @@ export async function actionGetLanguageModels() {
 export async function actionGetLanguageModelsForProject(projectId: string) {
   const dbAccess = await getUserSessionDBAccess();
   const models = await listLanguageModelsForProject(dbAccess, projectId);
-  return models.map(getModelInfo);
+  const defaultModelId = await getDefaultModelIdForProject(dbAccess, projectId);
+
+  // Sort: default first, then alphabetically by name
+  const modelsWithInfo = models.map(getModelInfo);
+  modelsWithInfo.sort((a, b) => {
+    // Default model first
+    if (a.id === defaultModelId && b.id !== defaultModelId) return -1;
+    if (b.id === defaultModelId && a.id !== defaultModelId) return 1;
+    // Alphabetical by name
+    return a.name.localeCompare(b.name);
+  });
+
+  return modelsWithInfo;
 }
 
 export async function actionGetDefaultLanguageModel() {
