@@ -713,6 +713,7 @@ export const modelSettings = pgTable(
     id: uuid('id').primaryKey().defaultRandom().notNull(),
     projectId: uuid('project_id').notNull(),
     modelId: text('model_id').notNull(),
+    modelName: text('model_name'),
     enabled: boolean('enabled').default(true).notNull(),
     isDefault: boolean('is_default').default(false).notNull(),
     createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),

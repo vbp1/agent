@@ -1,0 +1,1 @@
+ALTER TABLE "model_settings" ADD COLUMN "model_name" text;
