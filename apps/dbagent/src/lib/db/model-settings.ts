@@ -24,6 +24,15 @@ export async function getModelSetting(
   });
 }
 
+/**
+ * Get model name from DB by model ID.
+ * Returns model name if found, otherwise returns the modelId as fallback.
+ */
+export async function getModelNameFromDB(dbAccess: DBAccess, projectId: string, modelId: string): Promise<string> {
+  const setting = await getModelSetting(dbAccess, projectId, modelId);
+  return setting?.modelName ?? modelId;
+}
+
 export async function getDefaultModel(dbAccess: DBAccess, projectId: string): Promise<ModelSetting | null> {
   return dbAccess.query(async ({ db }) => {
     const result = await db

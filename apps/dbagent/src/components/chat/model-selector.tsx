@@ -18,12 +18,21 @@ type ModelInfo = { id: string; name: string };
 
 interface ModelSelectorProps {
   value: string;
+  valueName?: string;
   onValueChange: (value: string) => void;
+  onValueNameChange?: (valueName: string | undefined) => void;
   className?: string;
   projectId?: string;
 }
 
-export function ModelSelector({ value, onValueChange, className, projectId: propProjectId }: ModelSelectorProps) {
+export function ModelSelector({
+  value,
+  valueName,
+  onValueChange,
+  onValueNameChange,
+  className,
+  projectId: propProjectId
+}: ModelSelectorProps) {
   const params = useParams<{ project?: string }>();
   const projectId = propProjectId || params.project;
 
@@ -49,11 +58,11 @@ export function ModelSelector({ value, onValueChange, className, projectId: prop
     }
   }, [open, projectId, modelsLoaded]);
 
-  // Find selected model from loaded models list, or use value as display name
+  // Find selected model from loaded models list, or use provided name, or fallback to value
   const selectedModelName = useMemo(() => {
     const model = models.find((m) => m.id === value);
-    return model?.name ?? value;
-  }, [models, value]);
+    return model?.name ?? valueName ?? value;
+  }, [models, value, valueName]);
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -79,6 +88,7 @@ export function ModelSelector({ value, onValueChange, className, projectId: prop
 
                 startTransition(() => {
                   onValueChange(id);
+                  onValueNameChange?.(name);
                 });
               }}
               data-active={id === value}

@@ -11,13 +11,17 @@ import { ModelSelector } from './model-selector';
 function PureChatHeader({
   connections,
   model,
+  modelName,
   setModel,
+  setModelName,
   connectionId,
   setConnectionId,
   className
 }: {
   model: string;
+  modelName?: string;
   setModel: (model: string) => void;
+  setModelName: (modelName: string | undefined) => void;
   connections: Connection[];
   connectionId: string;
   setConnectionId: (connectionId: string) => void;
@@ -39,7 +43,7 @@ function PureChatHeader({
         <span className="md:sr-only">New Chat</span>
       </Button>
 
-      <ModelSelector value={model} onValueChange={setModel} />
+      <ModelSelector value={model} valueName={modelName} onValueChange={setModel} onValueNameChange={setModelName} />
 
       <ConnectionSelector connections={connections} setConnectionId={setConnectionId} connectionId={connectionId} />
     </header>
@@ -50,6 +54,7 @@ export const ChatHeader = memo(PureChatHeader, (prevProps, nextProps) => {
   return (
     prevProps.connections === nextProps.connections &&
     prevProps.model === nextProps.model &&
+    prevProps.modelName === nextProps.modelName &&
     prevProps.connectionId === nextProps.connectionId
   );
 });
