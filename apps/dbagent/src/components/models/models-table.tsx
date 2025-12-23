@@ -192,8 +192,11 @@ export function ModelsTable() {
     setIsRefreshing(true);
     try {
       // Reset the provider registry cache
-      await fetch('/api/models?action=refresh', { method: 'POST' });
-      // Reload models with fresh data
+      const response = await fetch('/api/models?action=refresh', { method: 'POST' });
+      if (!response.ok) {
+        console.error('Failed to refresh model cache:', response.status, response.statusText);
+      }
+      // Reload models with fresh data regardless of cache refresh result
       await loadModels();
     } catch (error) {
       console.error('Error refreshing models:', error);

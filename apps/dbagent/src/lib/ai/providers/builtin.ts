@@ -56,7 +56,9 @@ export type FetchModelsResult = {
  * Returns models and optional error message for graceful degradation.
  */
 async function fetchOpenAICompatibleModels(baseUrl: string, apiKey?: string): Promise<FetchModelsResult> {
-  const url = baseUrl.endsWith('/v1') ? `${baseUrl}/models` : `${baseUrl}/v1/models`;
+  // Normalize URL: remove trailing slashes and handle both /v1 and /v1/ cases
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
+  const url = normalizedBaseUrl.endsWith('/v1') ? `${normalizedBaseUrl}/models` : `${normalizedBaseUrl}/v1/models`;
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json'
@@ -66,16 +68,14 @@ async function fetchOpenAICompatibleModels(baseUrl: string, apiKey?: string): Pr
     headers['Authorization'] = `Bearer ${apiKey}`;
   }
 
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
+  try {
     const response = await fetch(url, {
       headers,
       signal: controller.signal
     });
-
-    clearTimeout(timeoutId);
 
     if (!response.ok) {
       return {
@@ -109,6 +109,8 @@ async function fetchOpenAICompatibleModels(baseUrl: string, apiKey?: string): Pr
       models: [],
       error: `Error fetching models from ${url}: ${error instanceof Error ? error.message : 'Unknown error'}`
     };
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -311,15 +313,27 @@ async function buildBuiltinProviderModelsAsync(): Promise<BuildModelsResult> {
     })
   );
 
+  // Return null if all providers returned empty model lists (e.g., autodiscovery failed)
+  if (Object.keys(models).length === 0) {
+    return null;
+  }
+
   return { models, errors };
 }
 
 function buildRegistry(
   builtinProviderModels: Record<string, Model>,
   errors: { provider: string; error: string }[] = []
-): ProviderRegistry {
+): ProviderRegistry | null {
+  const modelValues = Object.values(builtinProviderModels);
+
+  // Return null if no models available
+  if (modelValues.length === 0) {
+    return null;
+  }
+
   // We default to the first OpenAI model if available, otherwise fallback to the first model in the list
-  const fallbackModel = Object.values(builtinProviderModels)[0]!;
+  const fallbackModel = modelValues[0]!;
   const openaiModels = Object.entries(builtinProviderModels).filter(([id]) => id.startsWith('openai:'));
   const defaultLanguageModel = openaiModels[0]?.[1] ?? fallbackModel;
 

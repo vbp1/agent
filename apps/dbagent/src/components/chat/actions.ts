@@ -52,11 +52,11 @@ export async function actionGetLanguageModelsForProjectHybrid(projectId: string)
   });
 
   // Sync all models to DB for future calls (fire and forget)
-  void syncModelsToDB(
+  syncModelsToDB(
     dbAccess,
     projectId,
     modelsWithInfo.map((m) => ({ id: m.id, name: m.name }))
-  );
+  ).catch((e) => console.error('Error syncing models to DB:', e));
 
   return modelsWithInfo;
 }

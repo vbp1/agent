@@ -92,11 +92,11 @@ export async function GET(request: NextRequest) {
     // Sync all models to DB (fire and forget)
     // - Updates names for existing models if missing
     // - Creates new models with enabled: false
-    void syncModelsToDB(
+    syncModelsToDB(
       dbAccess,
       projectId,
       modelsWithSettings.map((m) => ({ id: m.id, name: m.name }))
-    );
+    ).catch((e) => console.error('Error syncing models to DB:', e));
 
     return Response.json({ models: modelsWithSettings, missingModels, providerErrors });
   } catch (error) {
@@ -202,6 +202,9 @@ export async function POST(request: NextRequest) {
 
   if (action === 'refresh') {
     try {
+      // Require authentication
+      await getUserSessionDBAccess();
+
       // Reset the provider registry cache to force a fresh fetch
       resetProviderRegistryCache();
       return Response.json({ success: true, message: 'Model cache refreshed' });
