@@ -39,33 +39,30 @@ export function ModelSelector({
   const [open, setOpen] = useState(false);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [modelsLoaded, setModelsLoaded] = useState(false);
-  const [loadedForProjectId, setLoadedForProjectId] = useState<string | undefined>(undefined);
+
+  // Reset state when projectId changes
+  useEffect(() => {
+    setModelsLoaded(false);
+    setModels([]);
+  }, [projectId]);
 
   // Load models lazily when dropdown is opened
   // Uses hybrid approach: DB first (fast), provider registry as fallback
   useEffect(() => {
-    // Reset if projectId changed
-    if (projectId !== loadedForProjectId) {
-      setModelsLoaded(false);
-      setModels([]);
-    }
+    if (!open || modelsLoaded) return;
 
-    if (open && !modelsLoaded) {
-      if (projectId) {
-        void actionGetLanguageModelsForProjectHybrid(projectId).then((loadedModels) => {
-          setModels(loadedModels);
-          setModelsLoaded(true);
-          setLoadedForProjectId(projectId);
-        });
-      } else {
-        void actionGetLanguageModels().then((loadedModels) => {
-          setModels(loadedModels);
-          setModelsLoaded(true);
-          setLoadedForProjectId(undefined);
-        });
-      }
+    if (projectId) {
+      void actionGetLanguageModelsForProjectHybrid(projectId).then((loadedModels) => {
+        setModels(loadedModels);
+        setModelsLoaded(true);
+      });
+    } else {
+      void actionGetLanguageModels().then((loadedModels) => {
+        setModels(loadedModels);
+        setModelsLoaded(true);
+      });
     }
-  }, [open, projectId, modelsLoaded, loadedForProjectId]);
+  }, [open, modelsLoaded, projectId]);
 
   // Find selected model from loaded models list, or use provided name, or fallback to value
   const selectedModelName = useMemo(() => {
