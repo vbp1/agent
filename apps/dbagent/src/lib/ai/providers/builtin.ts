@@ -410,5 +410,7 @@ export function hasBuiltinApiKeys(): boolean {
 }
 
 export function hasBuiltinProviders(): boolean {
-  return getBuiltinProviderRegistry() !== null;
+  // Treat OPENAI_BASE_URL as a configured builtin provider even though the sync registry
+  // might not be initialized without an API key (dynamic discovery happens in async registry).
+  return hasBuiltinApiKeys();
 }
