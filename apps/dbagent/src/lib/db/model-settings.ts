@@ -247,7 +247,7 @@ export async function syncModelsToDB(
             .where(and(eq(modelSettings.projectId, projectId), eq(modelSettings.modelId, id)));
         }
       } else {
-        // Model doesn't exist - create with enabled: false
+        // Model doesn't exist - create with enabled: false (user must explicitly enable)
         await db.insert(modelSettings).values({
           projectId,
           modelId: id,

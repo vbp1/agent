@@ -5,7 +5,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { env } from '~/lib/env/server';
 
 import { Model, Provider, ProviderModel, ProviderRegistry } from './types';
-import { createModel, createRegistryFromModels } from './utils';
+import { createEmptyRegistryWithErrors, createModel, createRegistryFromModels } from './utils';
 
 type BuiltinProvider = Provider & {
   models: BuiltinProviderModel[];
@@ -313,23 +313,19 @@ async function buildBuiltinProviderModelsAsync(): Promise<BuildModelsResult> {
     })
   );
 
-  // Return null if all providers returned empty model lists (e.g., autodiscovery failed)
-  if (Object.keys(models).length === 0) {
-    return null;
-  }
-
+  // Return models and errors (even if models is empty, errors should be preserved)
   return { models, errors };
 }
 
 function buildRegistry(
   builtinProviderModels: Record<string, Model>,
   errors: { provider: string; error: string }[] = []
-): ProviderRegistry | null {
+): ProviderRegistry {
   const modelValues = Object.values(builtinProviderModels);
 
-  // Return null if no models available
+  // Return empty registry with errors if no models available
   if (modelValues.length === 0) {
-    return null;
+    return createEmptyRegistryWithErrors(errors);
   }
 
   // We default to the first OpenAI model if available, otherwise fallback to the first model in the list

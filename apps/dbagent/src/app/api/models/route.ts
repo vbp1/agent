@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
       return {
         id: info.id,
         name: info.name,
-        enabled: setting ? setting.enabled : true, // Default to enabled if no setting
+        enabled: setting ? setting.enabled : false, // Default to disabled if no setting
         isDefault: defaultSetting?.modelId === info.id
       };
     });
