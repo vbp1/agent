@@ -13,7 +13,14 @@ import {
   TableHeader,
   TableRow
 } from '@xata.io/components';
-import { AlertTriangleIcon, ChevronLeftIcon, ChevronRightIcon, StarIcon, Trash2Icon } from 'lucide-react';
+import {
+  AlertTriangleIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  RefreshCwIcon,
+  StarIcon,
+  Trash2Icon
+} from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -24,16 +31,23 @@ interface ModelWithSettings {
   isDefault: boolean;
 }
 
+interface ProviderError {
+  provider: string;
+  error: string;
+}
+
 const ITEMS_PER_PAGE = 10;
 
 export function ModelsTable() {
   const { project } = useParams<{ project: string }>();
   const [models, setModels] = useState<ModelWithSettings[]>([]);
   const [missingModels, setMissingModels] = useState<ModelWithSettings[]>([]);
+  const [providerErrors, setProviderErrors] = useState<ProviderError[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [updatingModels, setUpdatingModels] = useState<Set<string>>(new Set());
   const [deletingModels, setDeletingModels] = useState<Set<string>>(new Set());
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const loadModels = useCallback(async () => {
     if (!project) return;
@@ -48,10 +62,12 @@ export function ModelsTable() {
       const data = await response.json();
       setModels(data.models);
       setMissingModels(data.missingModels || []);
+      setProviderErrors(data.providerErrors || []);
     } catch (error) {
       console.error('Error loading models:', error);
       setModels([]);
       setMissingModels([]);
+      setProviderErrors([]);
     } finally {
       setIsLoading(false);
     }
@@ -76,7 +92,7 @@ export function ModelsTable() {
       const response = await fetch(`/api/models?projectId=${project}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modelId: model.id, enabled: !model.enabled })
+        body: JSON.stringify({ modelId: model.id, modelName: model.name, enabled: !model.enabled })
       });
 
       if (!response.ok) {
@@ -119,7 +135,7 @@ export function ModelsTable() {
       const response = await fetch(`/api/models?projectId=${project}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modelId: model.id, isDefault: true })
+        body: JSON.stringify({ modelId: model.id, modelName: model.name, isDefault: true })
       });
 
       if (!response.ok) {
@@ -172,6 +188,23 @@ export function ModelsTable() {
     }
   };
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      // Reset the provider registry cache
+      const response = await fetch('/api/models?action=refresh', { method: 'POST' });
+      if (!response.ok) {
+        console.error('Failed to refresh model cache:', response.status, response.statusText);
+      }
+      // Reload models with fresh data regardless of cache refresh result
+      await loadModels();
+    } catch (error) {
+      console.error('Error refreshing models:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const SkeletonRow = () => (
     <TableRow>
       <TableCell>
@@ -195,6 +228,10 @@ export function ModelsTable() {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-2xl font-bold">Models</h1>
+        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isLoading || isRefreshing}>
+          <RefreshCwIcon className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          {isRefreshing ? 'Refreshing...' : 'Refresh'}
+        </Button>
       </div>
 
       <div className="mb-6">
@@ -206,6 +243,25 @@ export function ModelsTable() {
           </AlertDescription>
         </Alert>
       </div>
+
+      {/* Provider Errors Alert */}
+      {!isLoading && providerErrors.length > 0 && (
+        <div className="mb-6">
+          <Alert variant="destructive">
+            <AlertTriangleIcon className="h-4 w-4" />
+            <AlertTitle>Model Discovery Error</AlertTitle>
+            <AlertDescription>
+              <div className="mt-2 space-y-1">
+                {providerErrors.map((err, index) => (
+                  <div key={index}>
+                    <strong>{err.provider}:</strong> {err.error}
+                  </div>
+                ))}
+              </div>
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
 
       <Table>
         <TableHeader>

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { generateUUID } from '~/components/chat/utils';
+import { getDefaultModelIdForProject } from '~/lib/ai/providers';
 import { saveChat } from '~/lib/db/chats';
 import { getUserSessionDBAccess } from '~/lib/db/db';
 import { getScheduleRun } from '~/lib/db/schedule-runs';
@@ -30,6 +31,7 @@ export default async function Page({
   const userId = await requireUserSession();
   const dbAccess = await getUserSessionDBAccess();
   const chatId = generateUUID();
+  const modelId = await getDefaultModelIdForProject(dbAccess, project);
 
   if (scheduleRun) {
     const run = await getScheduleRun(dbAccess, scheduleRun);
@@ -65,7 +67,7 @@ export default async function Page({
         id: chatId,
         projectId: project,
         userId,
-        model: 'chat',
+        model: modelId,
         title: `Playbook ${playbook}`
       },
       [
@@ -90,7 +92,7 @@ export default async function Page({
         id: chatId,
         projectId: project,
         userId,
-        model: 'chat',
+        model: modelId,
         title: `Tool ${tool}`
       },
       [
@@ -115,7 +117,7 @@ export default async function Page({
         id: chatId,
         projectId: project,
         userId,
-        model: 'chat',
+        model: modelId,
         title: `New chat`
       },
       [
@@ -138,7 +140,7 @@ export default async function Page({
       id: chatId,
       projectId: project,
       userId,
-      model: 'chat',
+      model: modelId,
       title: 'New chat'
     });
   }

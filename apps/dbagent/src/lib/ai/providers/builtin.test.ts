@@ -370,7 +370,16 @@ describe('Builtin Provider Registry', () => {
 
       const { getBuiltinProviderRegistryAsync } = await import('./builtin');
 
-      await expect(getBuiltinProviderRegistryAsync()).rejects.toThrow('Failed to fetch models');
+      const registry = await getBuiltinProviderRegistryAsync();
+
+      expect(registry).not.toBeNull();
+      expect(registry!.listLanguageModels()).toEqual([]);
+      expect(registry!.getErrors()).toEqual([
+        {
+          provider: 'OpenAI',
+          error: 'Failed to fetch models from http://localhost:8000/v1/models: 500 Internal Server Error'
+        }
+      ]);
     });
 
     it('should extract friendly name from model ID', async () => {

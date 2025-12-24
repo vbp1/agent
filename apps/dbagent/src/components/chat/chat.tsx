@@ -18,6 +18,7 @@ function PureChat({
   id,
   projectId,
   defaultLanguageModel,
+  defaultLanguageModelName,
   connections,
   initialMessages,
   initialInput,
@@ -27,6 +28,7 @@ function PureChat({
   id: string;
   projectId: string;
   defaultLanguageModel: string;
+  defaultLanguageModelName?: string;
   connections: Connection[];
   initialMessages?: Array<UIMessage>;
   initialInput?: string;
@@ -37,6 +39,7 @@ function PureChat({
   const defaultConnection = connections.find((c) => c.isDefault);
   const [connectionId, setConnectionId] = useState<string>(initialConnectionId || defaultConnection?.id || '');
   const [model, setModel] = useState<string>(defaultLanguageModel);
+  const [modelName, setModelName] = useState<string | undefined>(defaultLanguageModelName);
 
   const { messages, setMessages, handleSubmit, input, setInput, append, status, stop, reload } = useChat({
     id,
@@ -92,7 +95,9 @@ function PureChat({
           <ChatHeader
             connections={connections}
             model={model}
+            modelName={modelName}
             setModel={setModel}
+            setModelName={setModelName}
             connectionId={connectionId}
             setConnectionId={setConnectionId}
           />
@@ -151,6 +156,7 @@ export const Chat = memo(PureChat, (prevProps, nextProps) => {
     prevProps.id === nextProps.id &&
     prevProps.projectId === nextProps.projectId &&
     prevProps.defaultLanguageModel === nextProps.defaultLanguageModel &&
+    prevProps.defaultLanguageModelName === nextProps.defaultLanguageModelName &&
     prevProps.initialMessages?.length === nextProps.initialMessages?.length &&
     prevProps.initialInput === nextProps.initialInput &&
     prevProps.initialConnectionId === nextProps.initialConnectionId

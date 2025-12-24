@@ -14,20 +14,14 @@ import {
 } from './builtin';
 import { createLiteLLMProviderRegistry } from './litellm';
 import { createOllamaProviderRegistry } from './ollama';
-import { Model, ModelWithFallback, ProviderRegistry } from './types';
-import { cached, combineRegistries, memoize } from './utils';
+import { Model, ModelWithFallback, ProviderError, ProviderRegistry } from './types';
+import { combineRegistries, MemoizedWithReset, memoizeWithReset } from './utils';
 
-const CACHE_TTL_MS = 60 * 1000; // 1 minute
-
-function buildProviderRegistry() {
+function buildProviderRegistry(): MemoizedWithReset<ProviderRegistry> {
   const registries: (() => Promise<ProviderRegistry | null>)[] = [];
-
-  // Will be true if we have a provider that requires to fetch updates from a remote source.
-  let requiresUpdates = false;
 
   // Choose base registry: LiteLLM takes precedence, otherwise use builtin providers if available
   if (env.LITELLM_BASE_URL && env.LITELLM_API_KEY) {
-    requiresUpdates = true;
     registries.push(
       async () =>
         await createLiteLLMProviderRegistry({
@@ -40,7 +34,6 @@ function buildProviderRegistry() {
     // This allows the app to start with only Ollama (no API keys required)
     // Use async version when OPENAI_BASE_URL is set (dynamic model fetching from OpenAI-compatible endpoints)
     if (requiresDynamicModelFetching()) {
-      requiresUpdates = true;
       registries.push(async () => await getBuiltinProviderRegistryAsync());
     } else {
       registries.push(() => Promise.resolve(getBuiltinProviderRegistry()));
@@ -49,7 +42,6 @@ function buildProviderRegistry() {
 
   // Add optional registries.
   if (env.OLLAMA_HOST) {
-    requiresUpdates = true;
     registries.push(
       async () =>
         await createOllamaProviderRegistry({
@@ -78,18 +70,32 @@ function buildProviderRegistry() {
     return combineRegistries(buildRegistries);
   };
 
-  return requiresUpdates ? cached(CACHE_TTL_MS, build) : memoize(build);
+  // Use memoizeWithReset for infinite caching with manual refresh capability
+  return memoizeWithReset(build);
 }
 
 const providerRegistry = buildProviderRegistry();
 
 export async function getProviderRegistry(): Promise<ProviderRegistry> {
-  return await providerRegistry();
+  return await providerRegistry.get();
+}
+
+/**
+ * Reset the provider registry cache, forcing a refresh on next access.
+ * Use this when user manually requests to refresh the models list.
+ */
+export function resetProviderRegistryCache(): void {
+  providerRegistry.reset();
 }
 
 export async function listLanguageModels(): Promise<Model[]> {
   const registry = await getProviderRegistry();
   return registry.listLanguageModels().filter((model) => !model.info().private);
+}
+
+export async function getProviderErrors(): Promise<ProviderError[]> {
+  const registry = await getProviderRegistry();
+  return registry.getErrors();
 }
 
 export async function getDefaultLanguageModel(): Promise<Model> {
@@ -124,18 +130,32 @@ export async function listLanguageModelsForProject(dbAccess: DBAccess, projectId
 }
 
 export async function getDefaultLanguageModelForProject(dbAccess: DBAccess, projectId: string): Promise<Model | null> {
+  // 1. Try to get explicitly set default model for the project (must be enabled)
   const defaultSetting = await getDefaultModel(dbAccess, projectId);
   if (defaultSetting) {
     try {
       return await getLanguageModel(defaultSetting.modelId);
     } catch {
-      // Model might have been removed, fall through to global default
+      // Model might have been removed, fall through to next fallback
     }
   }
-  // Fallback to global default
-  try {
-    return await getDefaultLanguageModel();
-  } catch {
-    return null;
+
+  // 2. Get list of enabled models for this project and return the first one
+  const enabledModels = await listLanguageModelsForProject(dbAccess, projectId);
+  if (enabledModels.length > 0) {
+    return enabledModels[0]!;
   }
+
+  // 3. No enabled models for this project
+  return null;
+}
+
+/**
+ * Get default model ID for project without triggering provider registry fetch.
+ * Use this when you only need the model ID string (e.g., when creating a new chat).
+ * Falls back to 'chat' alias if no default is set.
+ */
+export async function getDefaultModelIdForProject(dbAccess: DBAccess, projectId: string): Promise<string> {
+  const defaultSetting = await getDefaultModel(dbAccess, projectId);
+  return defaultSetting?.modelId ?? 'chat';
 }

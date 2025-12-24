@@ -1,5 +1,5 @@
 import { LanguageModel } from 'ai';
-import { Model, ModelWithFallback, ProviderModel, ProviderRegistry } from './types';
+import { Model, ModelWithFallback, ProviderError, ProviderModel, ProviderRegistry } from './types';
 
 type RegistryFromModelsProps<TModel extends Model> = {
   models: TModel[] | Record<string, TModel>;
@@ -7,6 +7,7 @@ type RegistryFromModelsProps<TModel extends Model> = {
   id?: (model: TModel) => string;
   defaultModel?: TModel | null;
   fallback?: (modelId: string) => TModel | undefined;
+  errors?: ProviderError[];
 };
 
 export function createRegistryFromModels<TModel extends Model>({
@@ -14,19 +15,32 @@ export function createRegistryFromModels<TModel extends Model>({
   id,
   defaultModel,
   fallback,
-  aliases
+  aliases,
+  errors = []
 }: RegistryFromModelsProps<TModel>): ProviderRegistry {
   const index: Record<string, TModel> = Array.isArray(models)
     ? Object.fromEntries(models.map((m: TModel) => [id ? id(m) : m.info().id, m]))
     : models;
-  const useDefault: TModel | null = defaultModel ?? (Array.isArray(models) ? models[0]! : Object.values(models)[0]!);
+
+  const modelValues = Array.isArray(models) ? models : Object.values(models);
+  const useDefault: TModel | null = defaultModel ?? modelValues[0] ?? null;
+
   const aliasModels: Record<string, TModel> = aliases
-    ? Object.fromEntries(Object.entries(aliases).map(([alias, modelId]) => [alias, index[modelId]!]))
+    ? Object.fromEntries(
+        Object.entries(aliases)
+          .filter(([, modelId]) => index[modelId])
+          .map(([alias, modelId]) => [alias, index[modelId]!])
+      )
     : {};
 
   return {
     listLanguageModels: () => Object.values(index),
-    defaultLanguageModel: () => useDefault,
+    defaultLanguageModel: () => {
+      if (!useDefault) {
+        throw new Error('No default language model configured');
+      }
+      return useDefault;
+    },
     languageModel: (modelId: string, useFallback?: boolean) => {
       const withFallback = useFallback && !!fallback;
 
@@ -43,7 +57,25 @@ export function createRegistryFromModels<TModel extends Model>({
         throw new Error(`Model ${modelId} not found and no fallback available`);
       }
       return reportFallbackModel(modelId, fallbackModel);
-    }
+    },
+    getErrors: () => errors
+  };
+}
+
+/**
+ * Create an empty registry that only contains errors.
+ * Used when no models could be loaded but we still want to report errors.
+ */
+export function createEmptyRegistryWithErrors(errors: ProviderError[]): ProviderRegistry {
+  return {
+    listLanguageModels: () => [],
+    defaultLanguageModel: () => {
+      throw new Error('No language models available');
+    },
+    languageModel: (modelId: string) => {
+      throw new Error(`Model ${modelId} not found - no models available`);
+    },
+    getErrors: () => errors
   };
 }
 
@@ -107,32 +139,26 @@ export function combineRegistries(registries: (ProviderRegistry | null)[]): Prov
         }
       }
       throw new Error(`Model ${modelId} not found`);
-    }
+    },
+    getErrors: () => nonNullRegistries.flatMap((registry) => registry.getErrors())
   };
 }
 
-export function cached<T>(ttlMs: number, fn: () => Promise<T>): () => Promise<T> {
-  let value: T | null = null;
-  let lastUpdate: number | null = null;
+export type MemoizedWithReset<T> = {
+  get: () => Promise<T>;
+  reset: () => void;
+};
 
-  return async () => {
-    const now = Date.now();
-    if (lastUpdate && now - lastUpdate < ttlMs) {
-      return value!;
+export function memoizeWithReset<T>(fn: () => Promise<T>): MemoizedWithReset<T> {
+  let value: T | null = null;
+  return {
+    get: async () => {
+      if (value) return value;
+      value = await fn();
+      return value;
+    },
+    reset: () => {
+      value = null;
     }
-
-    const result = await fn();
-    value = result;
-    lastUpdate = now;
-    return result;
-  };
-}
-
-export function memoize<T>(fn: () => Promise<T>): () => Promise<T> {
-  let value: T | null = null;
-  return async () => {
-    if (value) return value;
-    value = await fn();
-    return value;
   };
 }

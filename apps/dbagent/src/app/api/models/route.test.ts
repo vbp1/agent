@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies
 const mockListLanguageModels = vi.fn();
+const mockGetProviderErrors = vi.fn();
 const mockGetUserSessionDBAccess = vi.fn();
 const mockGetProjectById = vi.fn();
 const mockGetModelSettings = vi.fn();
@@ -10,9 +11,12 @@ const mockGetDefaultModel = vi.fn();
 const mockDeleteModelSetting = vi.fn();
 const mockSetDefaultModel = vi.fn();
 const mockUpdateModelEnabled = vi.fn();
+const mockSyncModelsToDB = vi.fn();
 
 vi.mock('~/lib/ai/providers', () => ({
-  listLanguageModels: () => mockListLanguageModels()
+  listLanguageModels: () => mockListLanguageModels(),
+  getProviderErrors: () => mockGetProviderErrors(),
+  resetProviderRegistryCache: vi.fn()
 }));
 
 vi.mock('~/lib/db/db', () => ({
@@ -28,9 +32,12 @@ vi.mock('~/lib/db/model-settings', () => ({
   getDefaultModel: (_dbAccess: unknown, projectId: string) => mockGetDefaultModel(projectId),
   deleteModelSetting: (_dbAccess: unknown, projectId: string, modelId: string) =>
     mockDeleteModelSetting(projectId, modelId),
-  setDefaultModel: (_dbAccess: unknown, projectId: string, modelId: string) => mockSetDefaultModel(projectId, modelId),
-  updateModelEnabled: (_dbAccess: unknown, projectId: string, modelId: string, enabled: boolean) =>
-    mockUpdateModelEnabled(projectId, modelId, enabled)
+  setDefaultModel: (_dbAccess: unknown, projectId: string, modelId: string, modelName?: string) =>
+    mockSetDefaultModel(projectId, modelId, modelName),
+  updateModelEnabled: (_dbAccess: unknown, projectId: string, modelId: string, enabled: boolean, modelName?: string) =>
+    mockUpdateModelEnabled(projectId, modelId, enabled, modelName),
+  syncModelsToDB: (_dbAccess: unknown, projectId: string, models: { id: string; name: string }[]) =>
+    mockSyncModelsToDB(projectId, models)
 }));
 
 // Helper to create mock model
@@ -54,6 +61,8 @@ describe('/api/models', () => {
     vi.clearAllMocks();
     mockGetUserSessionDBAccess.mockResolvedValue(mockDbAccess);
     mockGetProjectById.mockResolvedValue({ id: projectId, name: 'Test Project' });
+    mockGetProviderErrors.mockResolvedValue([]);
+    mockSyncModelsToDB.mockResolvedValue(undefined);
   });
 
   describe('GET', () => {
@@ -82,7 +91,10 @@ describe('/api/models', () => {
     it('should return models with settings', async () => {
       const mockModels = [createMockModel('openai:gpt-4', 'GPT-4'), createMockModel('anthropic:claude', 'Claude')];
       mockListLanguageModels.mockResolvedValue(mockModels);
-      mockGetModelSettings.mockResolvedValue([{ modelId: 'openai:gpt-4', enabled: false }]);
+      mockGetModelSettings.mockResolvedValue([
+        { modelId: 'openai:gpt-4', enabled: false },
+        { modelId: 'anthropic:claude', enabled: true }
+      ]);
       mockGetDefaultModel.mockResolvedValue({ modelId: 'anthropic:claude' });
 
       const { GET } = await import('./route');
@@ -93,16 +105,16 @@ describe('/api/models', () => {
 
       expect(response.status).toBe(200);
       expect(data.models).toHaveLength(2);
-      expect(data.models[0]).toEqual({
+      expect(data.models[1]).toEqual({
         id: 'openai:gpt-4',
         name: 'GPT-4',
         enabled: false,
         isDefault: false
       });
-      expect(data.models[1]).toEqual({
+      expect(data.models[0]).toEqual({
         id: 'anthropic:claude',
         name: 'Claude',
-        enabled: true, // default when no setting
+        enabled: true,
         isDefault: true
       });
     });

@@ -1,11 +1,12 @@
 import { NextRequest } from 'next/server';
-import { listLanguageModels } from '~/lib/ai/providers';
+import { getProviderErrors, listLanguageModels, resetProviderRegistryCache } from '~/lib/ai/providers';
 import { getUserSessionDBAccess } from '~/lib/db/db';
 import {
   deleteModelSetting,
   getDefaultModel,
   getModelSettings,
   setDefaultModel,
+  syncModelsToDB,
   updateModelEnabled
 } from '~/lib/db/model-settings';
 import { getProjectById } from '~/lib/db/projects';
@@ -45,9 +46,23 @@ export async function GET(request: NextRequest) {
       return {
         id: info.id,
         name: info.name,
-        enabled: setting ? setting.enabled : true, // Default to enabled if no setting
+        enabled: setting ? setting.enabled : false, // Default to disabled if no setting
         isDefault: defaultSetting?.modelId === info.id
       };
+    });
+
+    // Sort models: default first, then enabled, then alphabetically by name
+    modelsWithSettings.sort((a, b) => {
+      // Default model always first
+      if (a.isDefault !== b.isDefault) {
+        return a.isDefault ? -1 : 1;
+      }
+      // Enabled models before disabled
+      if (a.enabled !== b.enabled) {
+        return a.enabled ? -1 : 1;
+      }
+      // Alphabetical by name
+      return a.name.localeCompare(b.name);
     });
 
     // Find missing models (settings exist but model is no longer available)
@@ -60,7 +75,30 @@ export async function GET(request: NextRequest) {
         isDefault: defaultSetting?.modelId === s.modelId
       }));
 
-    return Response.json({ models: modelsWithSettings, missingModels });
+    // Sort missing models the same way
+    missingModels.sort((a, b) => {
+      if (a.isDefault !== b.isDefault) {
+        return a.isDefault ? -1 : 1;
+      }
+      if (a.enabled !== b.enabled) {
+        return a.enabled ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name);
+    });
+
+    // Get provider errors (e.g., autodiscovery failures)
+    const providerErrors = await getProviderErrors();
+
+    // Sync all models to DB (fire and forget)
+    // - Updates names for existing models if missing
+    // - Creates new models with enabled: false
+    syncModelsToDB(
+      dbAccess,
+      projectId,
+      modelsWithSettings.map((m) => ({ id: m.id, name: m.name }))
+    ).catch((e) => console.error('Error syncing models to DB:', e));
+
+    return Response.json({ models: modelsWithSettings, missingModels, providerErrors });
   } catch (error) {
     console.error('Error fetching models:', error);
     return new Response('An error occurred while fetching models', { status: 500 });
@@ -77,7 +115,7 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { modelId, enabled, isDefault } = body;
+    const { modelId, modelName, enabled, isDefault } = body;
 
     if (!modelId) {
       return new Response('modelId is required', { status: 400 });
@@ -93,7 +131,7 @@ export async function PATCH(request: NextRequest) {
 
     // Handle setting default model
     if (isDefault === true) {
-      await setDefaultModel(dbAccess, projectId, modelId);
+      await setDefaultModel(dbAccess, projectId, modelId, modelName);
       return Response.json({ success: true, message: 'Default model updated' });
     }
 
@@ -109,7 +147,7 @@ export async function PATCH(request: NextRequest) {
         }
       }
 
-      await updateModelEnabled(dbAccess, projectId, modelId, enabled);
+      await updateModelEnabled(dbAccess, projectId, modelId, enabled, modelName);
       return Response.json({ success: true, message: 'Model setting updated' });
     }
 
@@ -156,4 +194,25 @@ export async function DELETE(request: NextRequest) {
     console.error('Error deleting model setting:', error);
     return new Response('An error occurred while deleting model setting', { status: 500 });
   }
+}
+
+export async function POST(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const action = searchParams.get('action');
+
+  if (action === 'refresh') {
+    try {
+      // Require authentication
+      await getUserSessionDBAccess();
+
+      // Reset the provider registry cache to force a fresh fetch
+      resetProviderRegistryCache();
+      return Response.json({ success: true, message: 'Model cache refreshed' });
+    } catch (error) {
+      console.error('Error refreshing model cache:', error);
+      return new Response('An error occurred while refreshing model cache', { status: 500 });
+    }
+  }
+
+  return new Response('Unknown action', { status: 400 });
 }

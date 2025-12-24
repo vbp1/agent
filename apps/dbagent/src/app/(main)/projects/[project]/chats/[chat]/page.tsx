@@ -1,10 +1,11 @@
 import { UIMessage } from 'ai';
 import { DataStreamHandler } from '~/components/chat/artifacts/data-stream-handler';
 import { Chat } from '~/components/chat/chat';
-import { getDefaultLanguageModel } from '~/lib/ai/providers';
+import { getDefaultModelIdForProject } from '~/lib/ai/providers';
 import { getMessagesByChatId } from '~/lib/db/chats';
 import { listConnections } from '~/lib/db/connections';
 import { getUserSessionDBAccess } from '~/lib/db/db';
+import { getModelNameFromDB } from '~/lib/db/model-settings';
 import { Message } from '~/lib/db/schema';
 
 type PageParams = {
@@ -36,10 +37,12 @@ export default async function Page({ params }: { params: Promise<PageParams> }) 
 
   const dbAccess = await getUserSessionDBAccess();
   const connections = await listConnections(dbAccess, projectId);
-  const defaultLanguageModel = await getDefaultLanguageModel();
+  const defaultModelId = await getDefaultModelIdForProject(dbAccess, projectId);
   const defaultConnection = connections.find((c) => c.isDefault);
 
   const chat = await getMessagesByChatId(dbAccess, { id: chatId });
+  const modelId = chat.model ?? defaultModelId;
+  const modelName = await getModelNameFromDB(dbAccess, projectId, modelId);
 
   function convertToUIMessages(messages: Array<Message>): Array<UIMessage> {
     return messages.map((message) => ({
@@ -63,7 +66,8 @@ export default async function Page({ params }: { params: Promise<PageParams> }) 
         key={`chat-${chatId}`}
         id={chatId}
         projectId={projectId}
-        defaultLanguageModel={chat.model ?? defaultLanguageModel.info().id}
+        defaultLanguageModel={modelId}
+        defaultLanguageModelName={modelName}
         connections={connections}
         initialMessages={convertToUIMessages(chat.messages)}
         suggestedActions={suggestedActions}
