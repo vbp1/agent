@@ -11,7 +11,6 @@ export default [
     ignores: [
       'next.config.js',
       'react-table-config.d.ts',
-      'eslint.config.mjs',
       'postcss.config.js',
       'mcp-source/dist/**/*'
     ]

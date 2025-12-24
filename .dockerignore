@@ -1,12 +1,20 @@
 # Dependencies
 node_modules
+**/node_modules
 .pnpm-store
+**/.pnpm-store
 
 # Build outputs
 .next
+**/.next
 out
 dist
 build
+**/*.tsbuildinfo
+
+# Turbo cache
+.turbo
+**/.turbo
 
 # Cache
 .cache
@@ -35,4 +43,17 @@ yarn-error.log*
 Thumbs.db
 
 # Testing
-coverage 
+coverage
+
+# Git
+.git
+.gitignore
+
+# Environment files (secrets)
+.env
+.env.*
+!.env.example
+
+# Docker
+Dockerfile
+docker-compose*.yml
