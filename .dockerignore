@@ -1,9 +1,12 @@
 # Dependencies
 node_modules
+**/node_modules
 .pnpm-store
+**/.pnpm-store
 
 # Build outputs
 .next
+**/.next
 out
 dist
 build
