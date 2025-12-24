@@ -69,4 +69,4 @@ WORKDIR /app
 ENV NODE_PATH=/app/node_modules
 
 # Start both the scheduler and the Next.js application
-CMD ["sh", "-c", "pnpm -C apps/dbagent drizzle-kit migrate && (pnpm -C apps/dbagent tsx scripts/scheduler.ts & pnpm -C apps/dbagent next start --port $PORT)"]
+CMD ["sh", "-c", "pnpm -C apps/dbagent db:migrate && (pnpm -C apps/dbagent dev-scheduler & pnpm -C apps/dbagent start)"]
