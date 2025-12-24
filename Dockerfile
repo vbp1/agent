@@ -17,15 +17,16 @@ WORKDIR /app
 # Copy dependency files first (better layer caching)
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY apps/dbagent/package.json ./apps/dbagent/
-
-# Copy source code
-COPY apps/dbagent ./apps/dbagent
+COPY apps/dbagent/.npmrc ./apps/dbagent/
 
 # Install dependencies with BuildKit cache mount for pnpm store.
 # On code-only changes, this is very fast (~5-10s) because packages are cached
 # in the persistent mount, and pnpm only needs to recreate symlinks.
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
+
+# Copy source code
+COPY apps/dbagent ./apps/dbagent
 
 # Build the Next.js application
 WORKDIR /app/apps/dbagent
