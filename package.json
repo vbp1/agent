@@ -10,6 +10,7 @@
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "test": "turbo run test",
+    "unit": "turbo run unit",
     "tsc": "turbo run tsc",
     "generate": "turbo run generate",
     "format-check": "prettier --check \"./**/*.{ts,tsx,css,json,md,yml,yaml}\"",

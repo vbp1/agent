@@ -5,6 +5,7 @@
     "start": {},
     "lint": {},
     "test": {},
+    "unit": {},
     "tsc": {
       "dependsOn": ["^tsc"],
       "outputs": []
