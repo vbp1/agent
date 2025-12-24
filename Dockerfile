@@ -2,8 +2,10 @@
 # Use Node.js 22 as the base image
 FROM node:22-alpine AS base
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@10.5.2 --activate
+# Use a shared Corepack home so the non-root runtime user can reuse the
+# pnpm version installed during the build (avoids network access on startup).
+ENV COREPACK_HOME=/usr/local/share/corepack
+RUN mkdir -p "$COREPACK_HOME" && corepack enable
 
 # Set working directory
 WORKDIR /app
@@ -29,8 +31,8 @@ RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
 COPY apps/dbagent ./apps/dbagent
 
 # Build the Next.js application
-WORKDIR /app/apps/dbagent
-RUN DATABASE_URL="dummy" OPENAI_API_KEY="dummy" pnpm build
+WORKDIR /app
+RUN DATABASE_URL="dummy" OPENAI_API_KEY="dummy" pnpm -C apps/dbagent build
 
 # ============================================
 # Stage 2: Production image
@@ -48,6 +50,7 @@ RUN addgroup --system --gid 1001 nodejs && \
 
 # Copy the entire project structure to preserve module resolution
 COPY --from=builder /app ./
+COPY --from=builder $COREPACK_HOME $COREPACK_HOME
 
 # Set correct permissions
 RUN chown -R nextjs:nodejs /app
@@ -58,11 +61,12 @@ USER nextjs
 # Expose the port the app will run on
 EXPOSE 8080
 
-# Set the working directory to the app
-WORKDIR /app/apps/dbagent
+# Set the working directory so Corepack uses the root package.json as the
+# single source of truth for the pnpm version (packageManager field).
+WORKDIR /app
 
 # Configure NODE_PATH to help with module resolution
 ENV NODE_PATH=/app/node_modules
 
 # Start both the scheduler and the Next.js application
-CMD ["sh", "-c", "pnpm drizzle-kit migrate && (pnpm tsx scripts/scheduler.ts & pnpm next start --port $PORT)"]
+CMD ["sh", "-c", "pnpm -C apps/dbagent drizzle-kit migrate && (pnpm -C apps/dbagent tsx scripts/scheduler.ts & pnpm -C apps/dbagent next start --port $PORT)"]
