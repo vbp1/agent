@@ -43,13 +43,8 @@ export function CollectInfo({ connections }: CollectInfoProps) {
     void fetchExistingInfo();
   }, [selectedConnection]);
 
-  const handleCollectInfo = async () => {
-    if (selectedConnection) {
-      const result = await getCollectInfo(selectedConnection);
-      if (result.success && result.data) {
-        setCollectData(result.data);
-      }
-    }
+  const handleCollectInfo = () => {
+    setCollectData(null); // Clear cached data to force fresh fetch from target DB
     setShowInfo(true);
     setRefreshKey((prevKey) => prevKey + 1);
   };
