@@ -52,3 +52,9 @@ export async function getConnectionInfo<
     return (result[0]?.data as Value['data']) ?? null;
   });
 }
+
+export async function clearConnectionInfo(dbAccess: DBAccess, connectionId: string): Promise<void> {
+  return dbAccess.query(async ({ db }) => {
+    await db.delete(connectionInfo).where(eq(connectionInfo.connectionId, connectionId)).execute();
+  });
+}

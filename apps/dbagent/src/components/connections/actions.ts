@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { clearConnectionInfo } from '~/lib/db/connection-info';
 import {
   addConnection,
   deleteConnection,
@@ -57,10 +58,16 @@ export async function actionSaveConnection({
     }
 
     if (id) {
+      const existingConnection = await getConnection(dbAccess, id);
+      if (existingConnection && existingConnection.connectionString !== connectionString) {
+        await clearConnectionInfo(dbAccess, id);
+      }
       await updateConnection(dbAccess, { id, name, connectionString });
+      revalidatePath(`/projects/${projectId}`, 'layout');
       return { success: true, message: 'Connection updated successfully' };
     } else {
       await addConnection(dbAccess, { projectId, name, connectionString });
+      revalidatePath(`/projects/${projectId}`, 'layout');
       return { success: true, message: 'Connection added successfully' };
     }
   } catch (error) {
